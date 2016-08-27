@@ -1,0 +1,23 @@
+{
+  "name": "healthbot",
+  "version": "1.0.0",
+  "description": "Hackforhealthcare bot",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "hapibot"
+  },
+  "keywords": [
+    "healthcare"
+  ],
+  "author": "bfortuner",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "express": "^4.14.0",
+    "request": "^2.74.0"
+  }
+}
