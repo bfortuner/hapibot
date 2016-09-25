@@ -9,7 +9,7 @@ const token = process.env.FB_PAGE_ACCESS_TOKEN
 
 app.set('port', (process.env.PORT || 5000))
 
-// Process application/x-www-form-urlencoded
+// Process application/x-www-form-urlencoded - ok
 app.use(bodyParser.urlencoded({extended: false}))
 
 // Process application/json
@@ -46,10 +46,10 @@ app.get('/webhook/', function (req, res) {
             } else if (userInputText == 'chart') {
                 actionType = "CHART"
                 botResponseText = "Your chart: :)"
-                sendTextMessage(sender, botResponseText)
+                sendChartMessage(sender)
             } else if (userInputText == 'share') {
                 actionType = "SHARE"
-                botResponseText = "Sharing your weekly metrics with Dr. Miller at Harborview Medical Center"
+                botResponseText = "Sharing your weekly report with Dr. Miller at Harborview Medical Center"
                 sendTextMessage(sender, botResponseText)
             } else if (userInputText == 'seizure' || userInputText == 'aura') {
                 actionType = "DURATION"
@@ -58,7 +58,7 @@ app.get('/webhook/', function (req, res) {
                 actionType = "GENERIC"
                 botResponseText = "Hello! " 
                 + " Type 'Track' to record a seizure or aura."
-                + " 'Chart' to view your weekly metrics."
+                + " 'Chart' to view your weekly report."
                 + " 'Share' to share data with your Doctor."
                 sendTextMessage(sender, botResponseText)
             }
@@ -107,6 +107,8 @@ function sendDurationMessage(sender, episodeType) {
             }
         }
     }
+    //messageData["attachment"]["payload"]["elements"]["buttons"]["payload"] = "I'm recording your " 
+    //+ episodeType + " at " + currentTime + ". Hope you feel better!"
     request({
         url: 'https://graph.facebook.com/v2.6/me/messages',
         qs: {access_token:token},
@@ -251,6 +253,33 @@ function sendComplexMessage(sender) {
 function sendTextMessage(sender, userInputText) {
     console.log("Sending Text Message")
     let messageData = { text:userInputText }
+    request({
+        url: 'https://graph.facebook.com/v2.6/me/messages',
+        qs: {access_token:token},
+        method: 'POST',
+        json: {
+            recipient: {id:sender},
+            message: messageData,
+        }
+    }, function(error, response, body) {
+        if (error) {
+            console.log('Error sending messages: ', error)
+        } else if (response.body.error) {
+            console.log('Error: ', response.body.error)
+        }
+    })
+}
+
+function sendChartMessage(sender) {
+    console.log("Sending Chart Message")
+    let messageData = {
+        "attachment":{
+            "type":"image",
+            "payload": {
+                "url":"https://hapibot-graph.s3.amazonaws.com/94F0B623A38C47E488CE7D09A94349EC.png?Signature=wf19XAEPpW2UNLs%2Fg7lmLQQE4j8%3D&Expires=1475172977&AWSAccessKeyId=AKIAI2BSLTXENVFCNKQQ"
+            }
+        }
+    }
     request({
         url: 'https://graph.facebook.com/v2.6/me/messages',
         qs: {access_token:token},
