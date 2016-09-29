@@ -4,11 +4,12 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const moment = require('moment')
 const request = require('request-promise')
+const config = require('./environment')
 const app = express()
 
-const token = process.env.FB_PAGE_ACCESS_TOKEN
+const token = config.facebook.access_token
 
-app.set('port', (process.env.PORT || 5000))
+app.set('port', config.epilepsy_frontend.port)
 
 // Process application/x-www-form-urlencoded - ok
 app.use(bodyParser.urlencoded({extended: false}))
@@ -16,10 +17,12 @@ app.use(bodyParser.urlencoded({extended: false}))
 // Process application/json
 app.use(bodyParser.json())
 
+
 // Index route
 app.get('/', function (req, res) {
     res.send('Hello world, I am a chat bot')
 })
+
 
 app.get('/time/:offsethours', function(req,res) {
     console.log("offsethours:"+req.params.offsethours)
@@ -27,13 +30,57 @@ app.get('/time/:offsethours', function(req,res) {
     res.send('Time: '+time)
 })
 
+
 // for Facebook verification
 app.get('/webhook/', function (req, res) {
-    if (req.query['hub.verify_token'] === 'my_voice_is_my_password_verify_me') {
+    if (req.query['hub.verify_token'] === config.facebook.verification_token) {
         res.send(req.query['hub.challenge'])
     }
     res.send('Error, wrong token')
 })
+
+
+app.get('/test', function (req, res) {
+    let username = "admin"
+    let event_resp = createEvent(username)
+    let event = getEvent(event_resp.event_id)
+    event.event_duration = 99
+    let updated_event = updateEvent(event)
+    let chart_url = getChart(username)
+    res.send("charturl:"+chart_url)
+})
+
+
+function createEvent(username) {
+    console.log("Creating Event for User:"+username)
+    return 1
+}
+
+
+function getEvent(event_id) {
+    console.log("Getting Event:"+event_id)
+    return {
+        'event_id': 1,
+        'user_internal_id': "admin",
+        'event_time': new Date(),
+        'event_type': "SEIZURE",
+        'event_duration': 5,
+        'event_tracking_status': "COMPLETE"
+    }
+}
+
+
+function updateEvent(event) {
+    console.log("Updating Event:"+event)
+    return event
+}
+
+
+function getChart(username) {
+    console.log("Generating Chart for user:"+username)
+    return "fakeurltochart"
+}
+
 
 function extractTypeOfMessage(message) {
     if (message.quick_reply) {
@@ -42,11 +89,11 @@ function extractTypeOfMessage(message) {
         return "PAYLOAD"
     }
     return "TEXT"
-
 }
 
+
 function buildMsgStructFromMsg(message) {
-   console.log("Building Message Struct From: "+JSON.stringify(message))
+    console.log("Building Message Struct From: "+JSON.stringify(message))
     let typeOfMessage = extractTypeOfMessage(message)
     console.log("TYPE_OF_MESSAGE: "+typeOfMessage)
     let msgText
@@ -73,6 +120,7 @@ function buildMsgStructFromMsg(message) {
 
 
 app.post('/webhook/', function (req, res) {
+    console.log("Recieved new user message")
     let messaging_events = req.body.entry[0].messaging
     for (let i = 0; i < messaging_events.length; i++) {
         let event = req.body.entry[0].messaging[i]
@@ -93,26 +141,25 @@ app.post('/webhook/', function (req, res) {
 
 
 function handleUserEvent(userProfile, event) {
-    console.log("USER_PROFILE:"+JSON.stringify(userProfile) + "\nEvent:"+JSON.stringify(event))
+    console.log("Handing event for user:"+JSON.stringify(userProfile))
+    console.log("Event:"+JSON.stringify(event))
     if (event.message && event.message.text) {
         let msgText = event.message.text
         console.log("MSGText:"+msgText)
         let msgStruct = buildMsgStructFromMsg(event.message)
         console.log("MSGStruct:"+JSON.stringify(msgStruct))
-        console.log("SenderId:" + userProfile.id
-                    + " FacebookUserId:" + userProfile.id
+        console.log(" FacebookUserId:" + userProfile.id
                     + " UserInputText:" + msgStruct.userInputText)
         if (msgText.toLowerCase() == 'track') {
             msgStruct.eventType = 'TRACK'
-            console.log("Creating new event")
-            sendTrackQuickReply(userProfile.id, "FAKE_EVENT_ID")
+            let eventId = createEvent(userProfile.id)
+            sendTrackQuickReply(userProfile.id, eventId)
         } else if (msgText.toLowerCase() == 'chart') {
             msgStruct.eventType = 'CHART'
-            sendChartMessage(userProfile.id, userProfile.id)
+            sendChartMessage(userProfile.id)
         } else if (msgStruct.eventType == "TYPE_OF_EVENT") {
-            console.log("Saving type of event:" + msgStruct.userInputText)
-            console.log("durationuserprofileid:" + userProfile.id)
-            sendDurationMessage(userProfile, msgStruct.userInputText, "FAKE_EVENT_ID")
+            updateEvent("fake_event")
+            sendDurationMessage(userProfile, msgStruct.userInputText, msgStruct.eventId)
         } else {
             msgStruct.eventType = "GENERIC"
             msgStruct.replyText = "Hello! "
@@ -131,6 +178,7 @@ function handleUserEvent(userProfile, event) {
         let message = event.postback
         let msgStruct = buildMsgStructFromMsg(message)
         console.log("Saving eventDuration")
+        updateEvent("fake_event")
         let eventId = msgStruct.eventId
         let userInputText = msgStruct.userInputText
         let replyText = msgStruct.replyText
@@ -141,8 +189,9 @@ function handleUserEvent(userProfile, event) {
 
 
 function sendDurationMessage(user, episodeType, eventId) {
+    console.log("Sending Duration Message to user:"+user.id)
     let currentTime = getUserTime(user.timezone)
-    console.log("Sending Duration Message")
+    let recordingMsg = "I'm recording your " + episodeType + " on " + currentTime
     let messageData = {
         "attachment": {
             "type": "template",
@@ -154,23 +203,21 @@ function sendDurationMessage(user, episodeType, eventId) {
                     "buttons": [{
                         "type": "postback",
                         "title": "<1 minute",
-                        "payload": "EventType:DURATION::EventId:FAKE_ID::UserInputText:<1 minute::ReplyText:I'm recording your " + episodeType + " at " + currentTime+"::",
+                        "payload": "EventType:DURATION::EventId:"+eventId+"::UserInputText:<1::ReplyText:"+recordingMsg+"::"
                     }, {
                         "type": "postback",
-                        "title": "2-5 minutes",
-                        "payload": "EventType:DURATION::EventId:FAKE_ID::UserInputText:2-5 minutes::ReplyText:I'm recording your " + episodeType + " at " + currentTime+"::",
+                        "title": "1-3 minutes",
+                        "payload": "EventType:DURATION::EventId:"+eventId+"::UserInputText:1-3::ReplyText:"+recordingMsg+"::"
                     }, {
                         "type": "postback",
-                        "title": ">5 minutes",
-                        "payload": "EventType:DURATION::EventId:FAKE_ID::UserInputText:>5 minutes::ReplyText:I'm recording your " + episodeType + " at " + currentTime+"::",
-                    }],
+                        "title": ">3 minutes",
+                        "payload": "EventType:DURATION::EventId:"+eventId+"::UserInputText:>3::ReplyText:"+recordingMsg+"::"
+                   }],
                 }]
             }
         },
         "metadata": "eventId:" + eventId
     }
-    //messageData["attachment"]["payload"]["elements"]["buttons"]["payload"] = "I'm recording your "
-    //+ episodeType + " at " + currentTime + ". Hope you feel better!"
     request({
         url: 'https://graph.facebook.com/v2.6/me/messages',
         qs: {access_token:token},
@@ -189,20 +236,20 @@ function sendDurationMessage(user, episodeType, eventId) {
 }
 
 
-function sendTrackQuickReply(sender, eventId) {
-    console.log("Sending Track Quick Reply")
+function sendTrackQuickReply(facebookUserId, eventId) {
+    console.log("Sending Track Quick Reply to user:"+facebookUserId)
     let messageData = {
     "text":"What happened? (Select an option):",
     "quick_replies":[
         {
             "content_type":"text",
             "title":"Seizure",
-            "payload": "EventType:TYPE_OF_EVENT::EventId:FAKE_ID::UserInputText:SEIZURE::ReplyText:None::"
+            "payload": "EventType:TYPE_OF_EVENT::EventId:"+eventId+"::UserInputText:SEIZURE::ReplyText:None::"
         },
         {
             "content_type":"text",
             "title":"Aura",
-            "payload": "EventType:TYPE_OF_EVENT::EventId:FAKE_ID::UserInputText:AURA::ReplyText:None::"
+            "payload": "EventType:TYPE_OF_EVENT::EventId:"+eventId+"::UserInputText:AURA::ReplyText:None::"
         }
     ],
     "metadata": "eventId:" + eventId
@@ -212,7 +259,7 @@ function sendTrackQuickReply(sender, eventId) {
         qs: {access_token:token},
         method: 'POST',
         json: {
-            recipient: {id:sender},
+            recipient: {id:facebookUserId},
             message: messageData,
         }
     }, function(error, response, body) {
@@ -225,15 +272,15 @@ function sendTrackQuickReply(sender, eventId) {
 }
 
 
-function sendTextMessage(sender, userInputText) {
-    console.log("Sending Text Message")
+function sendTextMessage(facebookUserId, userInputText) {
+    console.log("Sending Text Message to user:"+facebookUserId)
     let messageData = { text:userInputText }
     request({
         url: 'https://graph.facebook.com/v2.6/me/messages',
         qs: {access_token:token},
         method: 'POST',
         json: {
-            recipient: {id:sender},
+            recipient: {id:facebookUserId},
             message: messageData,
         }
     }, function(error, response, body) {
@@ -246,13 +293,14 @@ function sendTextMessage(sender, userInputText) {
 }
 
 
-function sendChartMessage(sender, facebookUserId) {
-    console.log("Sending Chart Message")
+function sendChartMessage(facebookUserId) {
+    console.log("Sending Chart Message to user:"+facebookUserId)
+    let chartUrl = getChart(facebookUserId)
     let messageData = {
         "attachment":{
             "type":"image",
             "payload": {
-                "url":"https://amazon.com"
+                "url": chartUrl
             }
         }
     }
@@ -261,7 +309,7 @@ function sendChartMessage(sender, facebookUserId) {
         qs: {access_token:token},
         method: 'POST',
         json: {
-            recipient: {id:sender},
+            recipient: {id:facebookUserId},
             message: messageData,
         }
     }, function(error, response, body) {
@@ -275,11 +323,11 @@ function sendChartMessage(sender, facebookUserId) {
 
 
 function getUserProfile(facebookUserId) {
+    console.log("Fetching fb profile for user:"+facebookUserId)
     return request('https://graph.facebook.com/v2.6/'+facebookUserId+'?access_token='+token)
         .then(function (response) {
             console.log("Success retreiving profile for "+facebookUserId); // Show the HTML for the Modulus homepage.
             let bodyJson = JSON.parse(response)
-            console.log(bodyJson)
             return bodyJson
         })
         .catch(function (err) {
@@ -290,60 +338,8 @@ function getUserProfile(facebookUserId) {
 
 function getUserTime(offsetHours) {
     offsetHours = parseInt(offsetHours)
-    return moment.utc().add(offsetHours,'h').format('YYYY-MM-DD HH:mm:ss')
+    return moment.utc().add(offsetHours,'h').format('MMM Do h:mm a')
 }
-
-
-
-// function sendComplexMessage(sender) {
-//     console.log("Sending Complex Message")
-//     let messageData = {
-//         "attachment": {
-//             "type": "template",
-//             "payload": {
-//                 "template_type": "generic",
-//                 "elements": [{
-//                     "title": "First card",
-//                     "subtitle": "Element #1 of an hscroll",
-//                     "image_url": "http://messengerdemo.parseapp.com/img/rift.png",
-//                     "buttons": [{
-//                         "type": "web_url",
-//                         "url": "https://www.messenger.com",
-//                         "title": "web url"
-//                     }, {
-//                         "type": "postback",
-//                         "title": "Postback",
-//                         "payload": "Payload for first element in a generic bubble",
-//                     }],
-//                 }, {
-//                     "title": "Second card",
-//                     "subtitle": "Element #2 of an hscroll",
-//                     "image_url": "http://messengerdemo.parseapp.com/img/gearvr.png",
-//                     "buttons": [{
-//                         "type": "postback",
-//                         "title": "Postback",
-//                         "payload": "Payload for second element in a generic bubble",
-//                     }],
-//                 }]
-//             }
-//         }
-//     }
-//     request({
-//         url: 'https://graph.facebook.com/v2.6/me/messages',
-//         qs: {access_token:token},
-//         method: 'POST',
-//         json: {
-//             recipient: {id:sender},
-//             message: messageData,
-//         }
-//     }, function(error, response, body) {
-//         if (error) {
-//             console.log('Error sending messagesz: ', error)
-//         } else if (response.body.error) {
-//             console.log('Error: ', response.body.error)
-//         }
-//     })
-// }
 
 
 // Spin up the server
