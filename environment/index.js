@@ -1,5 +1,8 @@
 'use strict';
 
+const AUTH_USER="default"
+const AUTH_PASS=process.env.EPILEPSY_CLIENT_AUTH_KEY
+
 module.exports = {
 
   epilepsy_frontend: {
@@ -7,7 +10,8 @@ module.exports = {
   },
 
   epilepsy_backend: {
-    endpoint: 'https://epilepsydiary.herokuapp.com' //'http://localhost:5000'
+    endpoint: 'https://epilepsydiary.herokuapp.com',
+    auth: "Basic " + new Buffer(AUTH_USER+":"+AUTH_PASS).toString("base64"),
   },
 
   facebook: {

@@ -76,12 +76,13 @@ function createEvent(user) {
         url: config.epilepsy_backend.endpoint+"/event/create",
         method: 'POST',
         headers: {
-            'content-type': 'application/json'
+            'content-type': 'application/json',
+            'Authorization' : config.epilepsy_backend.auth
         },
         body: {
             username: user.id
         },
-        json: true // Automatically stringifies response body to JSON
+        json: true, // Automatically stringifies response body to JSON
     }).then(function (response) {
         console.log("succeeded in creating event")
         return response.event_id
@@ -95,9 +96,10 @@ function getEvent(eventId) {
         url: config.epilepsy_backend.endpoint+"/event/"+eventId,
         method: 'GET',
         headers: {
-            'content-type': 'application/json'
+            'content-type': 'application/json',
+            'Authorization' : config.epilepsy_backend.auth
         },
-        json: true // Automatically stringifies response body to JSON
+        json: true, // Automatically stringifies response body to JSON
     }).then(function (event) {
         console.log("Success retreiving event for "+eventId)
         return event
@@ -113,10 +115,11 @@ function updateEvent(event) {
         url: config.epilepsy_backend.endpoint+"/event/update",
         method: 'POST',
         headers: {
-            'content-type': 'application/json'
+            'content-type': 'application/json',
+            'Authorization' : config.epilepsy_backend.auth
         },
         body: event,
-        json: true // Automatically stringifies response body to JSON
+        json: true, // Automatically stringifies response body to JSON
     }).then(function (resp) {
         console.log("Success updating event for "+event.id)
         return resp.event_id
@@ -132,9 +135,10 @@ function getChart(username) {
         url: config.epilepsy_backend.endpoint+"/chart/"+username,
         method: 'GET',
         headers: {
-            'content-type': 'application/json'
+            'content-type': 'application/json',
+            'Authorization' : config.epilepsy_backend.auth
         },
-        json: true // Automatically stringifies response body to JSON
+        json: true, // Automatically stringifies response body to JSON
     }).then(function (resp) {
         console.log("Success retreiving chart for "+username)
         console.log("chart response:"+resp)
