@@ -40,45 +40,108 @@ app.get('/webhook/', function (req, res) {
 })
 
 
+//Example Async Calling
 app.get('/test', function (req, res) {
     let username = "admin"
-    let event_resp = createEvent(username)
-    let event = getEvent(event_resp.event_id)
-    event.event_duration = 99
-    let updated_event = updateEvent(event)
-    let chart_url = getChart(username)
-    res.send("charturl:"+chart_url)
+    let user = {"id":username}
+    let chart_url
+    createEvent(user).then(function(eventId) {
+        console.log("Fetched async event"+eventId)
+        return getEvent(eventId)
+    }).then(function(event) {
+        console.log("retreived event"+event)
+        event.event_duration = 99
+        return updateEvent(event)
+    }).then(function(eventId) {
+        console.log("eventId from 3rd call:"+eventId)
+        return createEvent(user)
+    }).then(function(eventId) {
+        console.log("eventId from 4th call:"+eventId)
+        return getChart(username)
+    }).then(function(chartUrl) {
+        console.log("chartUrl"+chartUrl)
+        res.send("charturl:"+chartUrl)
+    })
 })
 
 
-function createEvent(username) {
-    console.log("Creating Event for User:"+username)
-    return 1
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 
-function getEvent(event_id) {
-    console.log("Getting Event:"+event_id)
-    return {
-        'event_id': 1,
-        'user_internal_id': "admin",
-        'event_time': new Date(),
-        'event_type': "SEIZURE",
-        'event_duration': 5,
-        'event_tracking_status': "COMPLETE"
-    }
+function createEvent(user) {
+    console.log("Creating Event for User:"+JSON.stringify(user))
+    return request({
+        url: config.epilepsy_backend.endpoint+"/event/create",
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json'
+        },
+        body: {
+            username: user.id
+        },
+        json: true // Automatically stringifies response body to JSON
+    }).then(function (response) {
+        console.log("succeeded in creating event")
+        return response.event_id
+    })
+}
+
+
+function getEvent(eventId) {
+    console.log("Getting Event:"+eventId)
+    return request({
+        url: config.epilepsy_backend.endpoint+"/event/"+eventId,
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json'
+        },
+        json: true // Automatically stringifies response body to JSON
+    }).then(function (event) {
+        console.log("Success retreiving event for "+eventId)
+        return event
+    }).catch(function (err) {
+        console.log("Error retreiving event data:"+err)
+    })
 }
 
 
 function updateEvent(event) {
-    console.log("Updating Event:"+event)
-    return event
+    console.log("Updating Event:"+JSON.stringify(event))
+    return request({
+        url: config.epilepsy_backend.endpoint+"/event/update",
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json'
+        },
+        body: event,
+        json: true // Automatically stringifies response body to JSON
+    }).then(function (resp) {
+        console.log("Success updating event for "+event.id)
+        return resp.event_id
+    }).catch(function (err) {
+        console.log("Error update event:"+err)
+    })
 }
 
 
 function getChart(username) {
-    console.log("Generating Chart for user:"+username)
-    return "fakeurltochart"
+    console.log("Getting Chart for user:"+username)
+    return request({
+        url: config.epilepsy_backend.endpoint+"/chart/"+username,
+        method: 'GET',
+        headers: {
+            'content-type': 'application/json'
+        },
+        json: true // Automatically stringifies response body to JSON
+    }).then(function (resp) {
+        console.log("Success retreiving chart for "+username)
+        console.log("chart response:"+resp)
+        return resp.chart_url
+    }).catch(function (err) {
+        console.log("Error retreiving chart:"+err)
+    })
 }
 
 
@@ -127,7 +190,7 @@ app.post('/webhook/', function (req, res) {
         let facebookUserId = event.sender.id
         request('https://graph.facebook.com/v2.6/'+facebookUserId+'?access_token='+token)
         .then(function (response) {
-            console.log("Success retreiving profile for "+facebookUserId); // Show the HTML for the Modulus homepage.
+            console.log("Success retreiving profile for "+facebookUserId)
             var userProfile = JSON.parse(response)
             userProfile.id = facebookUserId
             handleUserEvent(userProfile, event)
@@ -152,14 +215,19 @@ function handleUserEvent(userProfile, event) {
                     + " UserInputText:" + msgStruct.userInputText)
         if (msgText.toLowerCase() == 'track') {
             msgStruct.eventType = 'TRACK'
-            let eventId = createEvent(userProfile.id)
-            sendTrackQuickReply(userProfile.id, eventId)
+            createEvent(userProfile).then(function(eventId) {
+                sendTrackQuickReply(userProfile.id, eventId)
+            })
         } else if (msgText.toLowerCase() == 'chart') {
             msgStruct.eventType = 'CHART'
             sendChartMessage(userProfile.id)
         } else if (msgStruct.eventType == "TYPE_OF_EVENT") {
-            updateEvent("fake_event")
-            sendDurationMessage(userProfile, msgStruct.userInputText, msgStruct.eventId)
+            let eventId = msgStruct.eventId
+            getEvent(eventId).then(function(event) {
+                event.event_type = msgStruct.userInputText
+                updateEvent(event)
+            })
+            sendDurationMessage(userProfile, msgStruct.userInputText, eventId)
         } else {
             msgStruct.eventType = "GENERIC"
             msgStruct.replyText = "Hello! "
@@ -177,11 +245,15 @@ function handleUserEvent(userProfile, event) {
         console.log("Handling Postback: " + JSON.stringify(json))
         let message = event.postback
         let msgStruct = buildMsgStructFromMsg(message)
-        console.log("Saving eventDuration")
-        updateEvent("fake_event")
         let eventId = msgStruct.eventId
         let userInputText = msgStruct.userInputText
         let replyText = msgStruct.replyText
+
+        getEvent(eventId).then(function(event) {
+            event.event_duration = userInputText
+            updateEvent(event)
+        })
+
         console.log("EVENT:"+ eventId + " RESPONSE:"+replyText + " USERINPUT:"+userInputText)
         sendTextMessage(userProfile.id, replyText)
     }
@@ -295,29 +367,30 @@ function sendTextMessage(facebookUserId, userInputText) {
 
 function sendChartMessage(facebookUserId) {
     console.log("Sending Chart Message to user:"+facebookUserId)
-    let chartUrl = getChart(facebookUserId)
-    let messageData = {
-        "attachment":{
-            "type":"image",
-            "payload": {
-                "url": chartUrl
+    getChart(facebookUserId).then(function(chartUrl) {
+        let messageData = {
+            "attachment":{
+                "type":"image",
+                "payload": {
+                    "url": chartUrl
+                }
             }
         }
-    }
-    request({
-        url: 'https://graph.facebook.com/v2.6/me/messages',
-        qs: {access_token:token},
-        method: 'POST',
-        json: {
-            recipient: {id:facebookUserId},
-            message: messageData,
-        }
-    }, function(error, response, body) {
-        if (error) {
-            console.log('Error sending messages: ', error)
-        } else if (response.body.error) {
-            console.log('Error: ', response.body.error)
-        }
+        request({
+            url: 'https://graph.facebook.com/v2.6/me/messages',
+            qs: {access_token:token},
+            method: 'POST',
+            json: {
+                recipient: {id:facebookUserId},
+                message: messageData,
+            }
+        }, function(error, response, body) {
+            if (error) {
+                console.log('Error sending messages: ', error)
+            } else if (response.body.error) {
+                console.log('Error: ', response.body.error)
+            }
+        })
     })
 }
 

@@ -7,7 +7,7 @@ module.exports = {
   },
 
   epilepsy_backend: {
-    endpoint: 'https://epilepsydiary.herokuapp.com'
+    endpoint: 'https://epilepsydiary.herokuapp.com' //'http://localhost:5000'
   },
 
   facebook: {
