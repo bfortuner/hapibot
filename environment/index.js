@@ -10,7 +10,7 @@ module.exports = {
   },
 
   epilepsy_backend: {
-    endpoint: 'https://epilepsydiary.herokuapp.com',
+    endpoint: 'https://epilepsybackend.herokuapp.com',
     auth: "Basic " + new Buffer(AUTH_USER+":"+AUTH_PASS).toString("base64"),
   },
 
